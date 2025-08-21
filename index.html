@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Filipe Racing 🏎</title>
+<style>
+  body { margin:0; background:#111; color:white; font-family:Arial; text-align:center; }
+  canvas { background:#444; display:block; margin:10px auto; border:3px solid white; }
+  #menu { margin-top:20px; }
+  button { font-size:20px; margin:5px; padding:10px 20px; cursor:pointer; }
+  #restartBtn { 
+    position: absolute; 
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%); 
+    z-index: 1000; 
+    display: none; 
+    font-size: 18px; 
+    padding: 12px 24px; 
+    background: #ff4444; 
+    color: white; 
+    border: none; 
+    border-radius: 5px; 
+    cursor: pointer; 
+  }
+</style>
+</head>
+<body>
+<h2>Filipe Racing 🏁</h2>
+<canvas id="game" width="500" height="600"></canvas>
+<div id="menu">
+  <p>Escolha seu personagem:</p>
+  <button onclick="startGame('🚘')">🚘 Filipe Carroça</button>
+  <button onclick="startGame('🏍️')">🏍️ Filipe Moto</button>
+  <button onclick="startGame('🏎')">🏎 Filipe Kart Vasco</button>
+</div>
+<button id="restartBtn" onclick="restartGame()">🔄 JOGAR NOVAMENTE</button>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let player, enemies=[], powerups=[], gameRunning=false, score=0, speed=3, frame=0;
+
+// Posições das 4 ruas (centro de cada rua)
+const lanePositions = [110, 180, 250, 320];
+let currentLane = 1; // Jogador começa na segunda rua (índice 1)
+
+// iniciar jogo
+function startGame(emoji){
+  document.getElementById("menu").style.display="none";
+  document.getElementById("restartBtn").style.display="none";
+  currentLane = 1; // Reset para a segunda rua
+  player = {x:lanePositions[currentLane],y:500,w:40,h:40,emoji:emoji,hp:(emoji=="🏎"?3:1),power:false,powerTime:0};
+  enemies=[]; powerups=[]; score=0; speed=3; frame=0; gameRunning=true;
+  loop();
+}
+
+// função para reiniciar o jogo
+function restartGame(){
+  document.getElementById("menu").style.display="block";
+  document.getElementById("restartBtn").style.display="none";
+  gameRunning = false;
+}
+
+// controles
+document.addEventListener("keydown", e=>{
+  if(!gameRunning) return;
+  if(e.code=="ArrowLeft" && currentLane > 0) {
+    currentLane--;
+    player.x = lanePositions[currentLane];
+  }
+  if(e.code=="ArrowRight" && currentLane < 3) {
+    currentLane++;
+    player.x = lanePositions[currentLane];
+  }
+});
+
+// spawn
+function spawn(){
+  if(frame%60==0){
+    if(Math.random()<0.7) {
+      const obstacleType = Math.random();
+      let emoji;
+      if(obstacleType < 0.3) emoji = "🚔"; // Polícia
+      else if(obstacleType < 0.5) emoji = "🚧"; // Cone
+      else if(obstacleType < 0.7) emoji = "🚖"; // Táxi
+      else if(obstacleType < 0.85) emoji = "🛑"; // Placa de pare
+      else if(obstacleType < 0.65) emoji = "🚍"; // Bus
+      else emoji = "🚇"; // Metrô
+      
+      // Escolhe uma das 4 ruas aleatoriamente
+      const randomLane = Math.floor(Math.random() * 4);
+      enemies.push({x:lanePositions[randomLane],y:-50,w:40,h:40,emoji:emoji});
+    }
+    if(Math.random()<0.2) {
+      // Escolhe uma das 4 ruas aleatoriamente para powerups
+      const randomLane = Math.floor(Math.random() * 4);
+      powerups.push({x:lanePositions[randomLane],y:-50,w:40,h:40,emoji:(Math.random()<0.5?"⭐":"💨"),type:(Math.random()<0.5?"star":"turbo")});
+    }
+  }
+}
+
+// colisão
+function collide(a,b){
+  return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;
+}
+
+function update(){
+  frame++;
+  spawn();
+  enemies.forEach(e=>e.y+=speed);
+  powerups.forEach(p=>p.y+=speed);
+
+  // colisão com inimigos
+  enemies.forEach((e,i)=>{
+    if(collide(player,e)){
+      if(player.power){ enemies.splice(i,1); }
+      else{
+        player.hp--; enemies.splice(i,1);
+        if(player.hp<=0){ gameRunning=false; endGame(); }
+      }
+    }
+  });
+
+  // colisão com powerups
+  powerups.forEach((p,i)=>{
+    if(collide(player,p)){
+      if(p.type=="star"){ player.power=true; player.powerTime=200; }
+      if(p.type=="turbo"){ speed+=2; setTimeout(()=>speed-=2,3000); }
+      powerups.splice(i,1);
+    }
+  });
+
+  // duração power
+  if(player.power){
+    player.powerTime--;
+    if(player.powerTime<=0) player.power=false;
+  }
+
+  // remover objetos
+  enemies = enemies.filter(e=>e.y<600);
+  powerups = powerups.filter(p=>p.y<600);
+
+  // score + dificuldade
+  score++;
+  if(score % 500 === 0) speed++;  // aumenta a velocidade a cada 500 pontos
+}
+
+function draw(){
+  ctx.clearRect(0,0,500,600);
+  
+  // pista (mais larga para acomodar 4 ruas)
+  ctx.fillStyle="gray";
+  ctx.fillRect(80,0,340,600);
+  
+  // linhas divisórias das 4 ruas
+  ctx.strokeStyle="white";
+  ctx.setLineDash([20,20]);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  // 3 linhas divisórias para criar 4 ruas
+  ctx.moveTo(145,0); ctx.lineTo(145,600); // Entre rua 1 e 2
+  ctx.moveTo(215,0); ctx.lineTo(215,600); // Entre rua 2 e 3
+  ctx.moveTo(285,0); ctx.lineTo(285,600); // Entre rua 3 e 4
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // player
+  ctx.font="40px Arial";
+  ctx.fillText(player.emoji,player.x,player.y);
+
+  // inimigos
+  enemies.forEach(e=>ctx.fillText(e.emoji,e.x,e.y));
+
+  // powerups
+  powerups.forEach(p=>ctx.fillText(p.emoji,p.x,p.y));
+
+  // HUD
+  ctx.fillStyle="white"; ctx.font="20px Arial";
+  ctx.fillText("Distância: "+score,10,20);
+  ctx.fillText("HP: "+player.hp,400,20);
+  if(player.power) ctx.fillText("⭐ Invencível!",200,20);
+  ctx.fillText("Velocidade: "+speed,180,50);
+  ctx.fillText("Rua: "+(currentLane+1),10,50);
+}
+
+function loop(){
+  if(!gameRunning) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function endGame(){
+  ctx.fillStyle="black"; ctx.globalAlpha=0.7;
+  ctx.fillRect(0,0,500,600);
+  ctx.globalAlpha=1;
+  ctx.fillStyle="yellow"; ctx.font="30px Arial";
+  ctx.fillText("GAME OVER!",170,280);
+  ctx.fillText("Distância percorrida: "+score,120,320);
+  
+  // Mostrar botão de reiniciar
+  document.getElementById("restartBtn").style.display = "block";
+}
+</script>
+</body>
+</html>
+
